@@ -29,6 +29,12 @@ mysql.init_app(app)
 
 
 def is_logged_in(f):
+    """
+    If the user is logged in, then execute the function. Otherwise, redirect the user to the login page
+    
+    :param f: the function to be decorated
+    :return: A function that wraps the function passed in.
+    """
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'logged_in' in session:
@@ -40,6 +46,12 @@ def is_logged_in(f):
 
 
 def not_logged_in(f):
+    """
+    If the user is logged in, redirect to the index page
+    
+    :param f: The function to be decorated
+    :return: A function wrap that takes the function f as an argument.
+    """
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'logged_in' in session:
@@ -51,6 +63,13 @@ def not_logged_in(f):
 
 
 def is_admin_logged_in(f):
+    """
+    If the admin_logged_in key is present in the session, return the function. Otherwise, redirect to
+    the admin_login page
+    
+    :param f: The function to be decorated
+    :return: A function
+    """
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'admin_logged_in' in session:
@@ -62,6 +81,12 @@ def is_admin_logged_in(f):
 
 
 def not_admin_logged_in(f):
+    """
+    If the admin_logged_in key is present in the session, redirect to the admin page
+    
+    :param f: The view function to decorate
+    :return: A function
+    """
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'admin_logged_in' in session:
@@ -73,6 +98,12 @@ def not_admin_logged_in(f):
 
 
 def wrappers(func, *args, **kwargs):
+    """
+    This function takes a function as an argument and returns a function
+    
+    :param func: The function to be wrapped
+    :return: A function that returns the result of func(*args, **kwargs)
+    """
     def wrapped():
         return func(*args, **kwargs)
 
@@ -80,12 +111,32 @@ def wrappers(func, *args, **kwargs):
 
 
 def content_based_filtering(product_id):
+    """
+    This function is used to recommend product based on the product ID. 
+    
+    The function will first get the product ID and then get the category of the product. 
+    
+    Then it will get all the product with the same category and then find the similarity between the
+    product and the product ID. 
+    
+    The similarity is calculated by the number of same features between the product and the product ID. 
+    
+    If the similarity is more than 11, then it will be considered as a recommendation. 
+    
+    The recommendation will be stored in a list called recommend_id. 
+    
+    If there is no recommendation, then it will return an empty string.
+    
+    :param product_id: The id of the product we want similar recommendations for
+    :return: a list of recommended products, a list of the product ids of the recommended products, the
+    number of products in the general category, and the product id.
+    """
     cur = mysql.connection.cursor()
     cur.execute("SELECT * FROM products WHERE id=%s", (product_id,))  # getting id row
     data = cur.fetchone()  # get row info
     data_cat = data['category']  # get id category ex shirt
     print('Showing result for Product Id: ' + product_id)
-    category_matched = cur.execute("SELECT * FROM products WHERE category=%s", (data_cat,))  # get all shirt category
+    category_matched = cur.execute("SELECT * FROM products WHERE category=%s", (data_cat,))  # get all products in this category
     print('Total product matched: ' + str(category_matched))
     cat_product = cur.fetchall()  # get all row
     cur.execute("SELECT * FROM product_level WHERE product_id=%s", (product_id,))  # id level info
@@ -195,6 +246,11 @@ def login():
 
 @app.route('/out')
 def logout():
+    """
+    Logs out the user by clearing the session and updating the user's online status to 0
+    :return: The return value from the logout() function is the URL from the index().
+
+    """
     if 'uid' in session:
         # Create cursor
         cur = mysql.connection.cursor()
@@ -207,7 +263,7 @@ def logout():
     return redirect(url_for('login'))
 
 
-class RegisterForm(Form):
+class RegisterForm(Form): # User registration form
     name = StringField('', [validators.length(min=3, max=50)],
                        render_kw={'autofocus': True, 'placeholder': 'Full Name'})
     username = StringField('', [validators.length(min=3, max=25)], render_kw={'placeholder': 'Username'})
@@ -244,65 +300,6 @@ def register():
 
         return redirect(url_for('login'))
     return render_template('register.html', form=form)
-
-
-class MessageForm(Form):  # Create Message Form
-    body = StringField('', [validators.length(min=1)], render_kw={'autofocus': True})
-
-
-@app.route('/chatting/<string:id>', methods=['GET', 'POST'])
-def chatting(id):
-    if 'uid' in session:
-        form = MessageForm(request.form)
-        # Create cursor
-        cur = mysql.connection.cursor()
-
-        # lid name
-        get_result = cur.execute("SELECT * FROM users WHERE id=%s", [id])
-        l_data = cur.fetchone()
-        if get_result > 0:
-            session['name'] = l_data['name']
-            uid = session['uid']
-            session['lid'] = id
-
-            if request.method == 'POST' and form.validate():
-                txt_body = form.body.data
-                # Create cursor
-                cur = mysql.connection.cursor()
-                cur.execute("INSERT INTO messages(body, msg_by, msg_to) VALUES(%s, %s, %s)",
-                            (txt_body, id, uid))
-                # Commit cursor
-                mysql.connection.commit()
-
-            # Get users
-            cur.execute("SELECT * FROM users")
-            users = cur.fetchall()
-
-            # Close Connection
-            cur.close()
-            return render_template('chat_room.html', users=users, form=form)
-        else:
-            flash('No permission!', 'danger')
-            return redirect(url_for('index'))
-    else:
-        return redirect(url_for('login'))
-
-
-@app.route('/chats', methods=['GET', 'POST'])
-def chats():
-    if 'lid' in session:
-        id = session['lid']
-        uid = session['uid']
-        # Create cursor
-        cur = mysql.connection.cursor()
-        # Get message
-        cur.execute("SELECT * FROM messages WHERE (msg_by=%s AND msg_to=%s) OR (msg_by=%s AND msg_to=%s) "
-                    "ORDER BY id ASC", (id, uid, uid, id))
-        chats = cur.fetchall()
-        # Close Connection
-        cur.close()
-        return render_template('chats.html', chats=chats, )
-    return redirect(url_for('login'))
 
 
 class OrderForm(Form):  # Create Order Form
@@ -889,6 +886,11 @@ class UpdateRegisterForm(Form):
 @app.route('/settings', methods=['POST', 'GET'])
 @is_logged_in
 def settings():
+    """Enables the user to update theit account information
+
+    Returns:
+        the updated page 
+    """
     form = UpdateRegisterForm(request.form)
     if 'user' in request.args:
         q = request.args['user']
@@ -922,31 +924,6 @@ def settings():
     else:
         flash('Unauthorised', 'danger')
         return redirect(url_for('login'))
-
-
-class DeveloperForm(Form):  #
-    id = StringField('', [validators.length(min=1)],
-                     render_kw={'placeholder': 'Input a product id...'})
-
-
-@app.route('/developer', methods=['POST', 'GET'])
-def developer():
-    form = DeveloperForm(request.form)
-    if request.method == 'POST' and form.validate():
-        q = form.id.data
-        curso = mysql.connection.cursor()
-        result = curso.execute("SELECT * FROM products WHERE id=%s", (q,))
-        if result > 0:
-            x = content_based_filtering(q)
-            wrappered = wrappers(content_based_filtering, q)
-            execution_time = timeit.timeit(wrappered, number=0)
-            seconds = ((execution_time / 1000) % 60)
-            return render_template('developer.html', form=form, x=x, execution_time=seconds)
-        else:
-            nothing = 'Nothing found'
-            return render_template('developer.html', form=form, nothing=nothing)
-    else:
-        return render_template('developer.html', form=form)
 
 
 if __name__ == '__main__':
